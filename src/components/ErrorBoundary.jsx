@@ -1,4 +1,9 @@
 import { Component } from 'react'
+import {
+  validateSnapshot,
+  isSnapshotExpired,
+  RECOVERY_EXPIRY_MS,
+} from '../utils/recoverySchema'
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -18,7 +23,7 @@ export default class ErrorBoundary extends Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo })
 
-    const { recoveryStorageKey, onCapture } = this.props
+    const { recoveryStorageKey, onCapture, recoveryExpiryMs } = this.props
 
     try {
       if (typeof onCapture === 'function') {
@@ -36,11 +41,13 @@ export default class ErrorBoundary extends Component {
       if (typeof recoveryStorageKey === 'string' && recoveryStorageKey.length > 0) {
         const raw = localStorage.getItem(recoveryStorageKey)
         if (raw) {
-          const parsed = JSON.parse(raw)
-          const age = Date.now() - (parsed?.capturedAt || 0)
-          if (age < 1000 * 60 * 60 * 24) {
-            this.setState({ recoverySnapshot: parsed })
-          } else {
+          const { valid, sanitized } = validateSnapshot(raw)
+          const expired = isSnapshotExpired(sanitized, {
+            expiryMs: typeof recoveryExpiryMs === 'number' ? recoveryExpiryMs : RECOVERY_EXPIRY_MS,
+          })
+          if (valid && !expired) {
+            this.setState({ recoverySnapshot: sanitized })
+          } else if (expired) {
             try {
               localStorage.removeItem(recoveryStorageKey)
             } catch (_) {}
@@ -73,12 +80,18 @@ export default class ErrorBoundary extends Component {
   }
 
   handleRestoreFromSnapshot = () => {
-    const { recoveryStorageKey, onRestore } = this.props
+    const { recoveryStorageKey, onRestore, recoveryExpiryMs } = this.props
     let snapshot = this.state.recoverySnapshot
     try {
       if (!snapshot && recoveryStorageKey) {
         const raw = localStorage.getItem(recoveryStorageKey)
-        snapshot = raw ? JSON.parse(raw) : null
+        if (raw) {
+          const { valid, sanitized } = validateSnapshot(raw)
+          const expired = isSnapshotExpired(sanitized, {
+            expiryMs: typeof recoveryExpiryMs === 'number' ? recoveryExpiryMs : RECOVERY_EXPIRY_MS,
+          })
+          if (valid && !expired) snapshot = sanitized
+        }
       }
     } catch (_e) {
       snapshot = null
@@ -140,18 +153,24 @@ export default class ErrorBoundary extends Component {
         showReload = true,
         showClearStorage = true,
         recoveryStorageKey,
+        recoveryExpiryMs,
       } = this.props
 
-      const hasSnapshot = Boolean(
-        this.state.recoverySnapshot ||
-          (recoveryStorageKey && (() => {
-            try {
-              return localStorage.getItem(recoveryStorageKey)
-            } catch (_) {
-              return null
-            }
-          })())
-      )
+      let storageSnapshot = null
+      if (!this.state.recoverySnapshot && recoveryStorageKey) {
+        try {
+          const raw = localStorage.getItem(recoveryStorageKey)
+          if (raw) {
+            const { valid, sanitized } = validateSnapshot(raw)
+            const expired = isSnapshotExpired(sanitized, {
+              expiryMs: typeof recoveryExpiryMs === 'number' ? recoveryExpiryMs : RECOVERY_EXPIRY_MS,
+            })
+            if (valid && !expired) storageSnapshot = sanitized
+          }
+        } catch (_) {}
+      }
+      const snapshot = this.state.recoverySnapshot || storageSnapshot
+      const hasSnapshot = Boolean(snapshot)
 
       return (
         <div

@@ -9,6 +9,12 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { FIELD_TYPES, NODE_TYPES, generateId } from './utils/constants'
 import { useLocalStorage, STORAGE_KEYS } from './hooks/useLocalStorage'
 import { validateAllFields } from './utils/validation'
+import {
+  validateSnapshot,
+  isSnapshotExpired,
+  RECOVERY_EXPIRY_MS,
+  SCHEMA_VERSION,
+} from './utils/recoverySchema'
 
 const DEFAULT_FIELDS = () => ([
   { id: generateId(), type: 'text', label: '申请标题', placeholder: '请输入申请标题', required: true },
@@ -50,10 +56,10 @@ function App() {
     try {
       const raw = localStorage.getItem(RECOVERY_KEY)
       if (raw) {
-        const parsed = JSON.parse(raw)
-        const age = Date.now() - (parsed?.capturedAt || 0)
-        if (age < 1000 * 60 * 60 * 24 && (parsed.formFields || parsed.workflowNodes)) {
-          setRecoveryAvailable(parsed)
+        const { valid, sanitized } = validateSnapshot(raw)
+        const expired = isSnapshotExpired(sanitized, { expiryMs: RECOVERY_EXPIRY_MS })
+        if (valid && !expired && (sanitized.formFields.length > 0 || sanitized.workflowNodes.length > 0)) {
+          setRecoveryAvailable(sanitized)
         } else {
           localStorage.removeItem(RECOVERY_KEY)
         }
@@ -207,6 +213,7 @@ function App() {
   const handleCapture = useCallback((ctx) => {
     try {
       const snapshot = {
+        schemaVersion: SCHEMA_VERSION,
         formFields,
         workflowNodes,
         selectedFieldId,
@@ -216,9 +223,16 @@ function App() {
         capturedAt: Date.now(),
         errorMessage: ctx.error?.message || String(ctx.error),
       }
-      localStorage.setItem(RECOVERY_KEY, JSON.stringify(snapshot))
+      // 写前先自行校验一次，保证落盘的都是合法 shape
+      const { sanitized } = validateSnapshot(snapshot)
+      localStorage.setItem(RECOVERY_KEY, JSON.stringify(sanitized))
       if (typeof console !== 'undefined' && console.info) {
-        console.info('[Recovery] 崩溃前已将编辑快照写入 localStorage（key=', RECOVERY_KEY, '，大小=', JSON.stringify(snapshot).length, '字节）')
+        const bytes = new Blob([JSON.stringify(sanitized)]).size
+        console.info(
+          '[Recovery] 崩溃前已将编辑快照写入 localStorage（key=',
+          RECOVERY_KEY,
+          '，大小=', bytes, '字节，警告数=', sanitized.meta.warnings.length, '）'
+        )
       }
     } catch (err) {
       if (typeof console !== 'undefined' && console.warn) {
@@ -227,28 +241,31 @@ function App() {
     }
   }, [formFields, workflowNodes, selectedFieldId, selectedNodeId, activeTab, previewFormData])
 
-  const handleRestore = useCallback((snapshot) => {
-    if (!snapshot) return false
+  const handleRestore = useCallback((rawSnapshot) => {
+    if (!rawSnapshot) return false
+    // 再校验一次，保证合法
+    const { valid, sanitized } = validateSnapshot(rawSnapshot)
+    if (!valid) return false
     let applied = false
-    if (Array.isArray(snapshot.formFields) && snapshot.formFields.length > 0) {
-      setFormFields(snapshot.formFields)
+    if (Array.isArray(sanitized.formFields) && sanitized.formFields.length > 0) {
+      setFormFields(sanitized.formFields)
       applied = true
     }
-    if (Array.isArray(snapshot.workflowNodes) && snapshot.workflowNodes.length > 0) {
-      setWorkflowNodes(snapshot.workflowNodes)
+    if (Array.isArray(sanitized.workflowNodes) && sanitized.workflowNodes.length > 0) {
+      setWorkflowNodes(sanitized.workflowNodes)
       applied = true
     }
-    if (snapshot.activeTab === 'form' || snapshot.activeTab === 'workflow') {
-      setActiveTab(snapshot.activeTab)
+    if (sanitized.activeTab === 'form' || sanitized.activeTab === 'workflow') {
+      setActiveTab(sanitized.activeTab)
     }
-    if (typeof snapshot.selectedFieldId === 'string') {
-      setSelectedFieldId(snapshot.selectedFieldId)
+    if (typeof sanitized.selectedFieldId === 'string') {
+      setSelectedFieldId(sanitized.selectedFieldId)
     }
-    if (typeof snapshot.selectedNodeId === 'string') {
-      setSelectedNodeId(snapshot.selectedNodeId)
+    if (typeof sanitized.selectedNodeId === 'string') {
+      setSelectedNodeId(sanitized.selectedNodeId)
     }
-    if (snapshot.previewFormData && typeof snapshot.previewFormData === 'object') {
-      setPreviewFormData(snapshot.previewFormData)
+    if (sanitized.previewFormData && typeof sanitized.previewFormData === 'object') {
+      setPreviewFormData({ ...sanitized.previewFormData })
     }
     try {
       localStorage.removeItem(RECOVERY_KEY)

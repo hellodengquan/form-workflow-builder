@@ -253,7 +253,9 @@ describe('ErrorBoundary', () => {
 
     it('过期快照（> 24h）不触发恢复 UI', () => {
       localStorage.setItem(TEST_KEY, JSON.stringify({
-        formFields: [{ id: 'old' }],
+        schemaVersion: 2,
+        formFields: [{ id: 'old', type: 'text', label: '老字段' }],
+        workflowNodes: [],
         capturedAt: Date.now() - 1000 * 60 * 60 * 25,
       }))
       render(
@@ -263,6 +265,83 @@ describe('ErrorBoundary', () => {
       )
       expect(screen.queryByText(/检测到崩溃前的编辑数据快照/)).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /恢复编辑数据/ })).not.toBeInTheDocument()
+      // 过期快照应当被自动清掉
+      expect(localStorage.getItem(TEST_KEY)).toBeNull()
+    })
+
+    it('recoveryExpiryMs prop 可自定义过期阈值（更短 => 触发过滤）', () => {
+      // 3 小时前写入，但阈值只有 1 小时 => 被判定过期
+      localStorage.setItem(TEST_KEY, JSON.stringify({
+        schemaVersion: 2,
+        formFields: [{ id: 'x', type: 'text', label: 'X' }],
+        workflowNodes: [],
+        capturedAt: Date.now() - 1000 * 60 * 60 * 3,
+      }))
+      render(
+        <ErrorBoundary recoveryStorageKey={TEST_KEY} recoveryExpiryMs={1000 * 60 * 60}>
+          <ThrowsOnRender />
+        </ErrorBoundary>
+      )
+      expect(screen.queryByRole('button', { name: /恢复编辑数据/ })).not.toBeInTheDocument()
+      expect(localStorage.getItem(TEST_KEY)).toBeNull()
+    })
+
+    it('recoveryExpiryMs prop 自定义为 7 天 => 3 天前快照仍能恢复', () => {
+      localStorage.setItem(TEST_KEY, JSON.stringify({
+        schemaVersion: 2,
+        formFields: [{ id: 'a', type: 'text', label: '三天前的字段' }],
+        workflowNodes: [],
+        capturedAt: Date.now() - 1000 * 60 * 60 * 24 * 3,
+      }))
+      render(
+        <ErrorBoundary recoveryStorageKey={TEST_KEY} recoveryExpiryMs={1000 * 60 * 60 * 24 * 7}>
+          <ThrowsOnRender />
+        </ErrorBoundary>
+      )
+      expect(screen.getByRole('button', { name: /从崩溃前的编辑数据快照还原/ })).toBeInTheDocument()
+    })
+
+    it('非法结构快照（缺少必需字段 / 类型错误）通过 validateSnapshot 过滤后不显示恢复按钮', () => {
+      localStorage.setItem(TEST_KEY, JSON.stringify({
+        schemaVersion: 2,
+        capturedAt: Date.now(),
+        formFields: [{ 缺少_id: true }], // 结构非法会被过滤
+        workflowNodes: '不是数组', // 类型错误会被置空
+      }))
+      render(
+        <ErrorBoundary recoveryStorageKey={TEST_KEY}>
+          <ThrowsOnRender />
+        </ErrorBoundary>
+      )
+      // formFields 全被过滤、workflowNodes 置空 => valid=false，不显示恢复按钮
+      expect(screen.queryByRole('button', { name: /恢复编辑数据/ })).not.toBeInTheDocument()
+    })
+
+    it('混合快照（部分字段合法）：经过 validateSnapshot 过滤后仍能还原', async () => {
+      localStorage.setItem(TEST_KEY, JSON.stringify({
+        schemaVersion: 2,
+        capturedAt: Date.now(),
+        formFields: [
+          { id: 'f1', type: 'text', label: '合法字段' },
+          { type: 'text' }, // 缺 id，被过滤
+        ],
+        workflowNodes: [
+          { id: 'n1', type: 'start', name: '开始节点', x: 100, y: 200 },
+          { id: 'bad', type: 'unknown-type', name: '非法', x: 0, y: 0 }, // 过滤
+        ],
+        selectedFieldId: 'f1',
+      }))
+      render(
+        <ErrorBoundary recoveryStorageKey={TEST_KEY}>
+          <ThrowsOnRender />
+        </ErrorBoundary>
+      )
+      // render 中有同步 storageSnapshot 读取逻辑，同时 componentDidCatch setState 异步
+      // 用 findByRole 等待直到按钮出现（若 render 中同步已成功则立即返回）
+      expect(
+        await screen.findByRole('button', { name: /从崩溃前的编辑数据快照还原/ })
+      ).toBeInTheDocument()
+      expect(screen.getByText(/检测到崩溃前的编辑数据快照/)).toBeInTheDocument()
     })
 
     it('无 snapshot 时点击恢复按钮会降级为重置状态', () => {
