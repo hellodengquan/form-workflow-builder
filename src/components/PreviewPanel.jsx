@@ -1,0 +1,441 @@
+import { useState, useEffect } from 'react'
+import { NODE_TYPES, FIELD_TYPES } from '../utils/constants'
+
+export default function PreviewPanel({ formFields, workflowNodes, onClose }) {
+  const [step, setStep] = useState(0)
+  const [view, setView] = useState('form')
+  const [formData, setFormData] = useState({})
+  const [currentNodeIdx, setCurrentNodeIdx] = useState(0)
+  const [comments, setComments] = useState({})
+
+  const sortedNodes = [...workflowNodes].sort((a, b) => a.y - b.y)
+  const approvalNodes = sortedNodes.filter(n => n.type === NODE_TYPES.APPROVAL || n.type === NODE_TYPES.START)
+
+  useEffect(() => {
+    const handleEsc = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [onClose])
+
+  const handleFieldChange = (fieldId, value) => {
+    setFormData(prev => ({ ...prev, [fieldId]: value }))
+  }
+
+  const nextNode = () => {
+    setCurrentNodeIdx(Math.min(currentNodeIdx + 1, sortedNodes.length - 1))
+  }
+
+  const prevNode = () => {
+    setCurrentNodeIdx(Math.max(currentNodeIdx - 1, 0))
+  }
+
+  const approve = () => {
+    const node = sortedNodes[currentNodeIdx]
+    setComments(prev => ({
+      ...prev,
+      [node.id]: [
+        ...(prev[node.id] || []),
+        { user: getApproverName(node), time: new Date().toLocaleString('zh-CN'), action: '同意', content: '同意该申请' }
+      ]
+    }))
+    if (currentNodeIdx < sortedNodes.length - 1) nextNode()
+  }
+
+  const reject = () => {
+    const node = sortedNodes[currentNodeIdx]
+    setComments(prev => ({
+      ...prev,
+      [node.id]: [
+        ...(prev[node.id] || []),
+        { user: getApproverName(node), time: new Date().toLocaleString('zh-CN'), action: '驳回', content: '材料不完整，请补充' }
+      ]
+    }))
+  }
+
+  return (
+    <div className="preview-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="preview-modal">
+        <div className="preview-header">
+          <div className="pv-title">
+            <span className="pvt-icon">👁️</span>
+            <div>
+              <h2>流程预览体验</h2>
+              <p>模拟真实审批场景，体验完整流程</p>
+            </div>
+          </div>
+
+          <div className="pv-tabs">
+            <button className={`pvt-btn ${view === 'form' ? 'active' : ''}`} onClick={() => setView('form')}>
+              📝 表单填写
+            </button>
+            <button className={`pvt-btn ${view === 'workflow' ? 'active' : ''}`} onClick={() => setView('workflow')}>
+              🔄 审批流转
+            </button>
+            <button className={`pvt-btn ${view === 'timeline' ? 'active' : ''}`} onClick={() => setView('timeline')}>
+              📊 审批轨迹
+            </button>
+          </div>
+
+          <button className="pv-close" onClick={onClose} title="关闭 (Esc)">×</button>
+        </div>
+
+        <div className="preview-body">
+          {view === 'form' && (
+            <div className="preview-form">
+              <div className="pf-banner">
+                <div className="pfb-left">
+                  <span className="pfb-icon">📋</span>
+                  <div>
+                    <h3>请假申请表</h3>
+                    <p>请填写以下信息提交审批</p>
+                  </div>
+                </div>
+                <div className="pfb-meta">
+                  <span>申请编号：QF{Date.now().toString().slice(-8)}</span>
+                  <span>申请时间：{new Date().toLocaleString('zh-CN')}</span>
+                </div>
+              </div>
+
+              <div className="pf-body">
+                {formFields.length === 0 ? (
+                  <div className="pf-empty">
+                    <span className="pfe-icon">📝</span>
+                    <p>暂无表单字段，请先添加</p>
+                  </div>
+                ) : (
+                  formFields.map(field => (
+                    <div key={field.id} className="pf-field">
+                      <div className="pff-label">
+                        {field.label}
+                        {field.required && <span className="req">*</span>}
+                      </div>
+                      <div className="pff-control">
+                        {renderField(field, formData[field.id], (v) => handleFieldChange(field.id, v))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="pf-footer">
+                <div className="pff-info">
+                  <span>将提交至：</span>
+                  {approvalNodes.slice(0, 3).map((n, i) => (
+                    <span key={n.id} className="flow-tag">
+                      {i + 1}. {getApproverName(n)}
+                    </span>
+                  ))}
+                  {approvalNodes.length > 3 && <span>等 {approvalNodes.length} 人</span>}
+                </div>
+                <div className="pff-actions">
+                  <button className="btn btn-outline" onClick={onClose}>取消</button>
+                  <button className="btn btn-primary" onClick={() => setView('workflow')}>
+                    提交申请 →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'workflow' && (
+            <div className="preview-workflow">
+              <div className="pw-tracker">
+                {sortedNodes.map((node, i) => (
+                  <div key={node.id} className={`track-step ${i < currentNodeIdx ? 'done' : ''} ${i === currentNodeIdx ? 'current' : ''}`}>
+                    <div className={`ts-dot ${node.type}`}>
+                      {i < currentNodeIdx ? '✓' : getNodeIcon(node.type)}
+                    </div>
+                    <div className="ts-content">
+                      <div className="ts-name">{node.name}</div>
+                      <div className="ts-approver">{getApproverName(node)}</div>
+                    </div>
+                    {i < sortedNodes.length - 1 && (
+                      <div className={`ts-line ${i < currentNodeIdx ? 'done' : ''}`}></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="pw-panel">
+                <div className="pwp-header">
+                  <div className="pwph-node">
+                    <span className={`node-tag ${sortedNodes[currentNodeIdx].type}`}>
+                      {getNodeTypeName(sortedNodes[currentNodeIdx].type)}
+                    </span>
+                    <h3>{sortedNodes[currentNodeIdx].name}</h3>
+                  </div>
+                  <div className="pwph-user">
+                    <div className="user-avatar">{getApproverName(sortedNodes[currentNodeIdx]).slice(0, 1)}</div>
+                    <div>
+                      <div className="user-name">{getApproverName(sortedNodes[currentNodeIdx])}</div>
+                      <div className="user-role">审批人</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pwp-body">
+                  <h4>📋 审批内容摘要</h4>
+                  <div className="content-summary">
+                    {formFields.slice(0, 4).map(f => (
+                      <div key={f.id} className="cs-row">
+                        <span className="cs-label">{f.label}：</span>
+                        <span className="cs-value">
+                          {Array.isArray(formData[f.id])
+                            ? formData[f.id].join('、')
+                            : formData[f.id] || `（${f.placeholder || '未填写'}）`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <h4 style={{ marginTop: 20 }}>💬 审批意见</h4>
+                  <textarea
+                    rows={3}
+                    placeholder="请输入审批意见..."
+                    className="comment-input"
+                    value={comments[sortedNodes[currentNodeIdx].id]?.[0]?.content || ''}
+                    readOnly
+                  />
+                </div>
+
+                <div className="pwp-footer">
+                  <div className="pwp-nav">
+                    <button className="btn btn-outline" onClick={prevNode} disabled={currentNodeIdx === 0}>
+                      ← 上一步
+                    </button>
+                    <span className="step-indicator">
+                      第 {currentNodeIdx + 1} / {sortedNodes.length} 节点
+                    </span>
+                    <button
+                      className="btn btn-outline"
+                      onClick={nextNode}
+                      disabled={currentNodeIdx === sortedNodes.length - 1}
+                    >
+                      下一步 →
+                    </button>
+                  </div>
+                  <div className="pwp-actions">
+                    <button className="btn btn-danger" onClick={reject}>❌ 驳回</button>
+                    <button className="btn btn-success" onClick={approve}>✅ 同意</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'timeline' && (
+            <div className="preview-timeline">
+              <div className="pt-info-card">
+                <div className="ptic-status success">
+                  <span className="status-icon">✓</span>
+                  <div>
+                    <h3>审批完成</h3>
+                    <p>共 {sortedNodes.length} 个节点 · 耗时约 2 天</p>
+                  </div>
+                </div>
+                <div className="ptic-summary">
+                  <div className="sum-item">
+                    <span className="sum-label">申请编号</span>
+                    <span className="sum-value">QF{Date.now().toString().slice(-8)}</span>
+                  </div>
+                  <div className="sum-item">
+                    <span className="sum-label">发起人</span>
+                    <span className="sum-value">张三 · 技术部</span>
+                  </div>
+                  <div className="sum-item">
+                    <span className="sum-label">提交时间</span>
+                    <span className="sum-value">{new Date().toLocaleString('zh-CN')}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="timeline-list">
+                {sortedNodes.map((node, i) => {
+                  const nodeComments = comments[node.id] || []
+                  const isApproved = i < currentNodeIdx || (nodeComments.length > 0 && nodeComments[0].action === '同意')
+                  return (
+                    <div key={node.id} className={`tl-item ${isApproved ? 'approved' : i === currentNodeIdx ? 'pending' : 'waiting'}`}>
+                      <div className="tl-dot">
+                        {isApproved ? '✓' : i === currentNodeIdx ? '⏳' : '○'}
+                      </div>
+                      <div className="tl-content">
+                        <div className="tl-header">
+                          <span className={`tl-node ${node.type}`}>{node.name}</span>
+                          <span className="tl-time">
+                            {isApproved
+                              ? formatTime(new Date(Date.now() - (sortedNodes.length - i) * 3600000))
+                              : i === currentNodeIdx ? '待处理' : '未开始'}
+                          </span>
+                        </div>
+                        <div className="tl-user">
+                          <span className="user-dot">{getApproverName(node).slice(0, 1)}</span>
+                          <span>{getApproverName(node)}</span>
+                        </div>
+                        {nodeComments.length > 0 && (
+                          <div className="tl-comment">
+                            <span className={`tl-action ${nodeComments[0].action === '同意' ? 'pass' : 'reject'}`}>
+                              {nodeComments[0].action}
+                            </span>
+                            <span>{nodeComments[0].content}</span>
+                          </div>
+                        )}
+                        {node.type === NODE_TYPES.CC && isApproved && (
+                          <div className="tl-comment">
+                            <span className="tl-action notice">已查看</span>
+                            <span>抄送人已确认阅知</span>
+                          </div>
+                        )}
+                      </div>
+                      {i < sortedNodes.length - 1 && <div className="tl-line"></div>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function renderField(field, value, onChange) {
+  const baseClass = 'preview-input'
+
+  switch (field.type) {
+    case 'textarea':
+      return (
+        <textarea
+          rows={3}
+          value={value || ''}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+    case 'select':
+      return (
+        <select value={value || ''} onChange={(e) => onChange(e.target.value)}>
+          <option value="">请选择...</option>
+          {(field.options || []).map((opt, i) => (
+            <option key={i} value={opt}>{opt}</option>
+          ))}
+        </select>
+      )
+    case 'radio':
+      return (
+        <div className="radio-group">
+          {(field.options || []).map((opt, i) => (
+            <label key={i}>
+              <input
+                type="radio"
+                name={field.id}
+                checked={value === opt}
+                onChange={() => onChange(opt)}
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+        </div>
+      )
+    case 'checkbox':
+      return (
+        <div className="check-group">
+          {(field.options || []).map((opt, i) => (
+            <label key={i}>
+              <input
+                type="checkbox"
+                checked={(value || []).includes(opt)}
+                onChange={(e) => {
+                  const arr = value || []
+                  onChange(e.target.checked ? [...arr, opt] : arr.filter(x => x !== opt))
+                }}
+              />
+              <span>{opt}</span>
+            </label>
+          ))}
+        </div>
+      )
+    case 'date':
+      return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} />
+    case 'file':
+      return (
+        <div className="upload-box">
+          <span className="ub-icon">📤</span>
+          <span>点击或拖拽文件到此处</span>
+        </div>
+      )
+    case 'user':
+      return (
+        <div className={`${baseClass} selector`}>
+          <span>👤 {value || '请选择人员'}</span>
+          <button className="sel-btn">选择</button>
+        </div>
+      )
+    case 'dept':
+      return (
+        <div className={`${baseClass} selector`}>
+          <span>🏢 {value || '请选择部门'}</span>
+          <button className="sel-btn">选择</button>
+        </div>
+      )
+    case 'number':
+      return (
+        <div className="number-input-wrap">
+          <input
+            type="number"
+            value={value || ''}
+            placeholder={field.placeholder}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {field.unit && <span className="unit">{field.unit}</span>}
+        </div>
+      )
+    default:
+      return (
+        <input
+          type="text"
+          value={value || ''}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )
+  }
+}
+
+function getApproverName(node) {
+  if (node.type === NODE_TYPES.START) return '申请人（张三）'
+  if (node.type === NODE_TYPES.END) return '系统'
+  if (node.approver && !node.approver.includes('请选择')) return node.approver
+  const names = ['李主管', '王经理', '赵总监', '钱总裁', '人事部', '财务部']
+  return names[Math.abs(node.id.length) % names.length]
+}
+
+function getNodeIcon(type) {
+  const map = {
+    [NODE_TYPES.START]: '▶',
+    [NODE_TYPES.APPROVAL]: '审',
+    [NODE_TYPES.CONDITION]: '？',
+    [NODE_TYPES.CC]: '抄',
+    [NODE_TYPES.END]: '终',
+  }
+  return map[type] || '●'
+}
+
+function getNodeTypeName(type) {
+  const map = {
+    [NODE_TYPES.START]: '开始',
+    [NODE_TYPES.APPROVAL]: '审批',
+    [NODE_TYPES.CC]: '抄送',
+    [NODE_TYPES.END]: '结束',
+  }
+  return map[type] || '节点'
+}
+
+function formatTime(d) {
+  return d.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
