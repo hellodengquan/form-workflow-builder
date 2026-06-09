@@ -146,7 +146,7 @@ describe('WorkflowDesigner', () => {
     )
     const approvalNode = Array.from(container.querySelectorAll('.workflow-node'))
       .find(n => n.querySelector('.node-name')?.textContent === '部门主管审批')
-    const delBtn = within(approvalNode).getByTitle('删除节点')
+    const delBtn = within(approvalNode).getByRole('button', { name: /删除.*节点/ })
     await user.click(delBtn)
     expect(onRemoveNode).toHaveBeenCalledWith('n2')
   })

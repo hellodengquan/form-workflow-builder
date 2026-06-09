@@ -79,35 +79,88 @@ export default function PreviewPanel({
   }
 
   return (
-    <div className="preview-mask" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="preview-modal">
+    <div
+      className="preview-mask"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="presentation"
+    >
+      <div
+        className="preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="preview-title"
+        aria-describedby="preview-desc"
+      >
         <div className="preview-header">
           <div className="pv-title">
-            <span className="pvt-icon">👁️</span>
+            <span className="pvt-icon" aria-hidden="true">👁️</span>
             <div>
-              <h2>流程预览体验</h2>
-              <p>模拟真实审批场景，体验完整流程</p>
+              <h2 id="preview-title">流程预览体验</h2>
+              <p id="preview-desc">模拟真实审批场景，体验完整流程</p>
             </div>
           </div>
 
-          <div className="pv-tabs">
-            <button className={`pvt-btn ${view === 'form' ? 'active' : ''}`} onClick={() => setView('form')}>
+          <div
+            className="pv-tabs"
+            role="tablist"
+            aria-label="预览模式选择"
+          >
+            <button
+              type="button"
+              role="tab"
+              id="pv-tab-form"
+              aria-selected={view === 'form'}
+              aria-controls="pv-panel-form"
+              tabIndex={view === 'form' ? 0 : -1}
+              className={`pvt-btn ${view === 'form' ? 'active' : ''}`}
+              onClick={() => setView('form')}
+            >
               📝 表单填写
             </button>
-            <button className={`pvt-btn ${view === 'workflow' ? 'active' : ''}`} onClick={() => setView('workflow')}>
+            <button
+              type="button"
+              role="tab"
+              id="pv-tab-workflow"
+              aria-selected={view === 'workflow'}
+              aria-controls="pv-panel-workflow"
+              tabIndex={view === 'workflow' ? 0 : -1}
+              className={`pvt-btn ${view === 'workflow' ? 'active' : ''}`}
+              onClick={() => setView('workflow')}
+            >
               🔄 审批流转
             </button>
-            <button className={`pvt-btn ${view === 'timeline' ? 'active' : ''}`} onClick={() => setView('timeline')}>
+            <button
+              type="button"
+              role="tab"
+              id="pv-tab-timeline"
+              aria-selected={view === 'timeline'}
+              aria-controls="pv-panel-timeline"
+              tabIndex={view === 'timeline' ? 0 : -1}
+              className={`pvt-btn ${view === 'timeline' ? 'active' : ''}`}
+              onClick={() => setView('timeline')}
+            >
               📊 审批轨迹
             </button>
           </div>
 
-          <button className="pv-close" onClick={onClose} title="关闭 (Esc)">×</button>
+          <button
+            type="button"
+            className="pv-close"
+            onClick={onClose}
+            title="关闭 (Esc)"
+            aria-label="关闭预览窗口（按 Esc 键也可关闭）"
+          >×</button>
         </div>
 
         <div className="preview-body">
           {view === 'form' && (
-            <div className="preview-form">
+            <div
+              className="preview-form"
+              role="tabpanel"
+              id="pv-panel-form"
+              aria-labelledby="pv-tab-form"
+              tabIndex={0}
+            >
               <div className="pf-banner">
                 <div className="pfb-left">
                   <span className="pfb-icon">📋</span>
@@ -182,46 +235,81 @@ export default function PreviewPanel({
           )}
 
           {view === 'workflow' && (
-            <div className="preview-workflow">
-              <div className="pw-tracker">
-                {sortedNodes.map((node, i) => (
-                  <div key={node.id} className={`track-step ${i < currentNodeIdx ? 'done' : ''} ${i === currentNodeIdx ? 'current' : ''}`}>
-                    <div className={`ts-dot ${node.type}`}>
-                      {i < currentNodeIdx ? '✓' : getNodeIcon(node.type)}
+            <div
+              className="preview-workflow"
+              role="tabpanel"
+              id="pv-panel-workflow"
+              aria-labelledby="pv-tab-workflow"
+              tabIndex={0}
+            >
+              <div
+                className="pw-tracker"
+                role="list"
+                aria-label={`流程节点进度，共 ${sortedNodes.length} 个节点，当前第 ${currentNodeIdx + 1} 节点`}
+              >
+                {sortedNodes.map((node, i) => {
+                  const isDone = i < currentNodeIdx
+                  const isCurrent = i === currentNodeIdx
+                  return (
+                    <div
+                      key={node.id}
+                      role="listitem"
+                      aria-label={`${getNodeTypeName(node.type)}节点：${node.name}，处理人 ${getApproverName(node)}，${isDone ? '已完成' : isCurrent ? '正在处理' : '待处理'}`}
+                      aria-current={isCurrent || undefined}
+                      className={`track-step ${isDone ? 'done' : ''} ${isCurrent ? 'current' : ''}`}
+                    >
+                      <div
+                        className={`ts-dot ${node.type}`}
+                        aria-hidden="true"
+                      >
+                        {isDone ? '✓' : getNodeIcon(node.type)}
+                      </div>
+                      <div className="ts-content">
+                        <div className="ts-name">{node.name}</div>
+                        <div className="ts-approver">{getApproverName(node)}</div>
+                      </div>
+                      {i < sortedNodes.length - 1 && (
+                        <div
+                          className={`ts-line ${isDone ? 'done' : ''}`}
+                          role="presentation"
+                        ></div>
+                      )}
                     </div>
-                    <div className="ts-content">
-                      <div className="ts-name">{node.name}</div>
-                      <div className="ts-approver">{getApproverName(node)}</div>
-                    </div>
-                    {i < sortedNodes.length - 1 && (
-                      <div className={`ts-line ${i < currentNodeIdx ? 'done' : ''}`}></div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
-              <div className="pw-panel">
-                <div className="pwp-header">
+              <article className="pw-panel" aria-label="当前节点详情">
+                <header className="pwp-header">
                   <div className="pwph-node">
-                    <span className={`node-tag ${sortedNodes[currentNodeIdx].type}`}>
+                    <span
+                      className={`node-tag ${sortedNodes[currentNodeIdx].type}`}
+                      aria-label={`节点类型：${getNodeTypeName(sortedNodes[currentNodeIdx].type)}`}
+                    >
                       {getNodeTypeName(sortedNodes[currentNodeIdx].type)}
                     </span>
                     <h3>{sortedNodes[currentNodeIdx].name}</h3>
                   </div>
-                  <div className="pwph-user">
-                    <div className="user-avatar">{getApproverName(sortedNodes[currentNodeIdx]).slice(0, 1)}</div>
+                  <div className="pwph-user" aria-label={`处理人：${getApproverName(sortedNodes[currentNodeIdx])}`}>
+                    <div className="user-avatar" aria-hidden="true">
+                      {getApproverName(sortedNodes[currentNodeIdx]).slice(0, 1)}
+                    </div>
                     <div>
                       <div className="user-name">{getApproverName(sortedNodes[currentNodeIdx])}</div>
                       <div className="user-role">审批人</div>
                     </div>
                   </div>
-                </div>
+                </header>
 
                 <div className="pwp-body">
                   <h4>📋 审批内容摘要</h4>
-                  <div className="content-summary">
+                  <div
+                    className="content-summary"
+                    role="list"
+                    aria-label="表单填写摘要"
+                  >
                     {formFields.slice(0, 4).map(f => (
-                      <div key={f.id} className="cs-row">
+                      <div key={f.id} className="cs-row" role="listitem">
                         <span className="cs-label">{f.label}：</span>
                         <span className="cs-value">
                           {Array.isArray(formData[f.id])
@@ -239,67 +327,113 @@ export default function PreviewPanel({
                     className="comment-input"
                     value={comments[sortedNodes[currentNodeIdx].id]?.[0]?.content || ''}
                     readOnly
+                    aria-label={`${sortedNodes[currentNodeIdx].name} 审批意见`}
                   />
                 </div>
 
-                <div className="pwp-footer">
-                  <div className="pwp-nav">
-                    <button className="btn btn-outline" onClick={prevNode} disabled={currentNodeIdx === 0}>
+                <footer className="pwp-footer">
+                  <div
+                    className="pwp-nav"
+                    role="group"
+                    aria-label="节点导航"
+                  >
+                    <button
+                      className="btn btn-outline"
+                      onClick={prevNode}
+                      disabled={currentNodeIdx === 0}
+                      aria-label="查看上一个节点"
+                    >
                       ← 上一步
                     </button>
-                    <span className="step-indicator">
+                    <span className="step-indicator" aria-live="polite">
                       第 {currentNodeIdx + 1} / {sortedNodes.length} 节点
                     </span>
                     <button
                       className="btn btn-outline"
                       onClick={nextNode}
                       disabled={currentNodeIdx === sortedNodes.length - 1}
+                      aria-label="查看下一个节点"
                     >
                       下一步 →
                     </button>
                   </div>
-                  <div className="pwp-actions">
-                    <button className="btn btn-danger" onClick={reject}>❌ 驳回</button>
-                    <button className="btn btn-success" onClick={approve}>✅ 同意</button>
+                  <div
+                    className="pwp-actions"
+                    role="group"
+                    aria-label="审批操作"
+                  >
+                    <button
+                      className="btn btn-danger"
+                      onClick={reject}
+                      aria-label="驳回当前审批"
+                    >
+                      ❌ 驳回
+                    </button>
+                    <button
+                      className="btn btn-success"
+                      onClick={approve}
+                      aria-label="同意当前审批"
+                    >
+                      ✅ 同意
+                    </button>
                   </div>
-                </div>
-              </div>
+                </footer>
+              </article>
             </div>
           )}
 
           {view === 'timeline' && (
-            <div className="preview-timeline">
-              <div className="pt-info-card">
-                <div className="ptic-status success">
-                  <span className="status-icon">✓</span>
+            <div
+              className="preview-timeline"
+              role="tabpanel"
+              id="pv-panel-timeline"
+              aria-labelledby="pv-tab-timeline"
+              tabIndex={0}
+            >
+              <article className="pt-info-card" aria-label="审批概要">
+                <div className="ptic-status success" role="status" aria-label="审批状态">
+                  <span className="status-icon" aria-hidden="true">✓</span>
                   <div>
                     <h3>审批完成</h3>
                     <p>共 {sortedNodes.length} 个节点 · 耗时约 2 天</p>
                   </div>
                 </div>
-                <div className="ptic-summary">
-                  <div className="sum-item">
+                <div
+                  className="ptic-summary"
+                  role="list"
+                  aria-label="申请基础信息"
+                >
+                  <div className="sum-item" role="listitem">
                     <span className="sum-label">申请编号</span>
                     <span className="sum-value">QF{Date.now().toString().slice(-8)}</span>
                   </div>
-                  <div className="sum-item">
+                  <div className="sum-item" role="listitem">
                     <span className="sum-label">发起人</span>
                     <span className="sum-value">张三 · 技术部</span>
                   </div>
-                  <div className="sum-item">
+                  <div className="sum-item" role="listitem">
                     <span className="sum-label">提交时间</span>
                     <span className="sum-value">{new Date().toLocaleString('zh-CN')}</span>
                   </div>
                 </div>
-              </div>
+              </article>
 
-              <div className="timeline-list">
+              <ol
+                className="timeline-list"
+                role="list"
+                aria-label={`审批轨迹时间线，共 ${sortedNodes.length} 条记录`}
+              >
                 {sortedNodes.map((node, i) => {
                   const nodeComments = comments[node.id] || []
                   const isApproved = i < currentNodeIdx || (nodeComments.length > 0 && nodeComments[0].action === '同意')
                   return (
-                    <div key={node.id} className={`tl-item ${isApproved ? 'approved' : i === currentNodeIdx ? 'pending' : 'waiting'}`}>
-                      <div className="tl-dot">
+                    <li
+                      key={node.id}
+                      role="listitem"
+                      aria-label={`时间线第 ${i + 1} 项：${getNodeTypeName(node.type)} 节点「${node.name}」，处理人${getApproverName(node)}，${isApproved ? '已完成' : i === currentNodeIdx ? '待处理' : '未开始'}`}
+                      className={`tl-item ${isApproved ? 'approved' : i === currentNodeIdx ? 'pending' : 'waiting'}`}
+                    >
+                      <div className="tl-dot" aria-hidden="true">
                         {isApproved ? '✓' : i === currentNodeIdx ? '⏳' : '○'}
                       </div>
                       <div className="tl-content">
@@ -312,12 +446,15 @@ export default function PreviewPanel({
                           </span>
                         </div>
                         <div className="tl-user">
-                          <span className="user-dot">{getApproverName(node).slice(0, 1)}</span>
+                          <span className="user-dot" aria-hidden="true">{getApproverName(node).slice(0, 1)}</span>
                           <span>{getApproverName(node)}</span>
                         </div>
                         {nodeComments.length > 0 && (
                           <div className="tl-comment">
-                            <span className={`tl-action ${nodeComments[0].action === '同意' ? 'pass' : 'reject'}`}>
+                            <span
+                              className={`tl-action ${nodeComments[0].action === '同意' ? 'pass' : 'reject'}`}
+                              role="note"
+                            >
                               {nodeComments[0].action}
                             </span>
                             <span>{nodeComments[0].content}</span>
@@ -330,11 +467,11 @@ export default function PreviewPanel({
                           </div>
                         )}
                       </div>
-                      {i < sortedNodes.length - 1 && <div className="tl-line"></div>}
-                    </div>
+                      {i < sortedNodes.length - 1 && <div className="tl-line" aria-hidden="true"></div>}
+                    </li>
                   )
                 })}
-              </div>
+              </ol>
             </div>
           )}
         </div>
@@ -345,6 +482,8 @@ export default function PreviewPanel({
 
 function renderField(field, value, onChange) {
   const baseClass = 'preview-input'
+  const required = !!field.required
+  const ariaLabel = `${field.label}${required ? '（必填）' : ''}`
 
   switch (field.type) {
     case 'textarea':
@@ -354,11 +493,18 @@ function renderField(field, value, onChange) {
           value={value || ''}
           placeholder={field.placeholder}
           onChange={(e) => onChange(e.target.value)}
+          aria-label={ariaLabel}
+          aria-required={required || undefined}
         />
       )
     case 'select':
       return (
-        <select value={value || ''} onChange={(e) => onChange(e.target.value)}>
+        <select
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={ariaLabel}
+          aria-required={required || undefined}
+        >
           <option value="">请选择...</option>
           {(field.options || []).map((opt, i) => (
             <option key={i} value={opt}>{opt}</option>
@@ -367,7 +513,8 @@ function renderField(field, value, onChange) {
       )
     case 'radio':
       return (
-        <div className="radio-group">
+        <fieldset className="radio-group">
+          <legend className="visually-hidden">{ariaLabel}</legend>
           {(field.options || []).map((opt, i) => (
             <label key={i}>
               <input
@@ -375,15 +522,19 @@ function renderField(field, value, onChange) {
                 name={field.id}
                 checked={value === opt}
                 onChange={() => onChange(opt)}
+                aria-label={`${field.label}，选项${opt}`}
               />
               <span>{opt}</span>
             </label>
           ))}
-        </div>
+        </fieldset>
       )
     case 'checkbox':
       return (
-        <div className="check-group">
+        <fieldset className="check-group">
+          <legend className="visually-hidden">
+            {ariaLabel}，可多选
+          </legend>
           {(field.options || []).map((opt, i) => (
             <label key={i}>
               <input
@@ -393,43 +544,74 @@ function renderField(field, value, onChange) {
                   const arr = value || []
                   onChange(e.target.checked ? [...arr, opt] : arr.filter(x => x !== opt))
                 }}
+                aria-label={`${field.label}，选项${opt}`}
               />
               <span>{opt}</span>
             </label>
           ))}
-        </div>
+        </fieldset>
       )
     case 'date':
-      return <input type="date" value={value || ''} onChange={(e) => onChange(e.target.value)} />
+      return (
+        <input
+          type="date"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          aria-label={ariaLabel}
+          aria-required={required || undefined}
+        />
+      )
     case 'file':
       return (
-        <div className="upload-box">
-          <span className="ub-icon">📤</span>
+        <div className="upload-box" role="group" aria-label={`${field.label}附件上传`}>
+          <span className="ub-icon" aria-hidden="true">📤</span>
           <span>点击或拖拽文件到此处</span>
         </div>
       )
     case 'user':
       return (
-        <div className={`${baseClass} selector`}>
+        <div
+          className={`${baseClass} selector`}
+          role="group"
+          aria-label={`${field.label}人员选择`}
+        >
           <span>👤 {value || '请选择人员'}</span>
-          <button className="sel-btn">选择</button>
+          <button
+            type="button"
+            className="sel-btn"
+            aria-label={`打开${field.label}人员选择器`}
+          >
+            选择
+          </button>
         </div>
       )
     case 'dept':
       return (
-        <div className={`${baseClass} selector`}>
+        <div
+          className={`${baseClass} selector`}
+          role="group"
+          aria-label={`${field.label}部门选择`}
+        >
           <span>🏢 {value || '请选择部门'}</span>
-          <button className="sel-btn">选择</button>
+          <button
+            type="button"
+            className="sel-btn"
+            aria-label={`打开${field.label}部门选择器`}
+          >
+            选择
+          </button>
         </div>
       )
     case 'number':
       return (
-        <div className="number-input-wrap">
+        <div className="number-input-wrap" role="group" aria-label={ariaLabel}>
           <input
             type="number"
-            value={value || ''}
+            value={value === undefined || value === null ? '' : value}
             placeholder={field.placeholder}
             onChange={(e) => onChange(e.target.value)}
+            aria-label={`${ariaLabel}输入框`}
+            aria-required={required || undefined}
           />
           {field.unit && <span className="unit">{field.unit}</span>}
         </div>
@@ -441,6 +623,8 @@ function renderField(field, value, onChange) {
           value={value || ''}
           placeholder={field.placeholder}
           onChange={(e) => onChange(e.target.value)}
+          aria-label={ariaLabel}
+          aria-required={required || undefined}
         />
       )
   }

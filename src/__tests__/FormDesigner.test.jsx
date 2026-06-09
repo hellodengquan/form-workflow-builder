@@ -120,8 +120,8 @@ describe('FormDesigner', () => {
       />
     )
 
-    const fieldItem = screen.getByText(/金额/).closest('.field-item')
-    const deleteBtn = within(fieldItem).getByTitle('删除')
+    const fieldItem = screen.getByText('金额').closest('.field-item')
+    const deleteBtn = within(fieldItem).getByRole('button', { name: /删除.*字段/ })
     await user.click(deleteBtn)
     expect(onRemove).toHaveBeenCalledWith('f2')
   })

@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import FieldLibrary from './components/FieldLibrary'
 import FormDesigner from './components/FormDesigner'
 import WorkflowDesigner from './components/WorkflowDesigner'
 import PreviewPanel from './components/PreviewPanel'
 import PropertyPanel from './components/PropertyPanel'
 import Toolbar from './components/Toolbar'
+import ErrorBoundary from './components/ErrorBoundary'
 import { FIELD_TYPES, NODE_TYPES, generateId } from './utils/constants'
 import { useLocalStorage, STORAGE_KEYS } from './hooks/useLocalStorage'
 import { validateAllFields } from './utils/validation'
@@ -24,6 +25,8 @@ const DEFAULT_NODES = () => ([
   { id: 'end-1', type: NODE_TYPES.END, name: '流程结束', x: 320, y: 520, approver: '系统' },
 ])
 
+const MOBILE_BREAKPOINT = 1024
+
 function App() {
   const [activeTab, setActiveTab] = useState('form')
   const [formFields, setFormFields] = useLocalStorage(STORAGE_KEYS.FORM_FIELDS, DEFAULT_FIELDS)
@@ -34,6 +37,47 @@ function App() {
   const [validationErrors, setValidationErrors] = useState({})
   const [previewFormData, setPreviewFormData] = useState({})
   const [showValidationToast, setShowValidationToast] = useState(null)
+
+  const [isNarrowViewport, setIsNarrowViewport] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  )
+  const [mobileView, setMobileView] = useState('center')
+  const [drawerOpen, setDrawerOpen] = useState(null)
+
+  useEffect(() => {
+    const handleResize = () => {
+      const narrow = window.innerWidth < MOBILE_BREAKPOINT
+      setIsNarrowViewport(narrow)
+      if (!narrow) {
+        setDrawerOpen(null)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    handleResize()
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        if (showPreview) {
+          setShowPreview(false)
+        } else if (drawerOpen) {
+          setDrawerOpen(null)
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault()
+        setDrawerOpen(prev => prev === 'left' ? null : 'left')
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault()
+        setDrawerOpen(prev => prev === 'right' ? null : 'right')
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [showPreview, drawerOpen])
 
   const validationResult = useMemo(() => {
     return validateAllFields(formFields, previewFormData)
@@ -53,7 +97,8 @@ function App() {
     }
     setFormFields(prev => [...prev, newField])
     setSelectedFieldId(newField.id)
-  }, [setFormFields])
+    if (isNarrowViewport) setDrawerOpen(null)
+  }, [setFormFields, isNarrowViewport])
 
   const updateField = useCallback((fieldId, updates) => {
     setFormFields(prev => prev.map(f => f.id === fieldId ? { ...f, ...updates } : f))
@@ -131,105 +176,244 @@ function App() {
   const selectedField = formFields.find(f => f.id === selectedFieldId)
   const selectedNode = workflowNodes.find(n => n.id === selectedNodeId)
 
-  return (
-    <div className="app-container">
-      <Toolbar
+  const handleResetBoundary = useCallback(() => {
+    setSelectedFieldId(null)
+    setSelectedNodeId(null)
+    setValidationErrors({})
+    setPreviewFormData({})
+    setShowPreview(false)
+    setDrawerOpen(null)
+  }, [])
+
+  const renderLeftPanel = () => (
+    <aside
+      className={`left-panel ${drawerOpen === 'left' ? 'drawer-open' : ''}`}
+      role="region"
+      aria-label={activeTab === 'form' ? '字段库面板（Ctrl+B 切换）' : '节点库面板（Ctrl+B 切换）'}
+      aria-hidden={isNarrowViewport && drawerOpen !== 'left'}
+    >
+      {isNarrowViewport && (
+        <div className="drawer-header">
+          <span className="drawer-title">
+            {activeTab === 'form' ? '📚 字段库' : '🧱 节点库'}
+          </span>
+          <button
+            type="button"
+            className="drawer-close"
+            aria-label="关闭侧边面板"
+            onClick={() => setDrawerOpen(null)}
+          >×</button>
+        </div>
+      )}
+      {activeTab === 'form' && (
+        <FieldLibrary onAddField={(type) => {
+          addField(type)
+        }} />
+      )}
+      {activeTab === 'workflow' && (
+        <div className="node-library">
+          <h3 className="panel-title">节点库</h3>
+          <div className="node-lib-list">
+            {[NODE_TYPES.APPROVAL, NODE_TYPES.CONDITION, NODE_TYPES.CC].map(type => (
+              <div key={type} className="node-lib-item">
+                <span className="node-lib-icon" style={{ background: getNodeColor(type) }} aria-hidden="true">
+                  {getNodeIcon(type)}
+                </span>
+                <span className="node-lib-label">{getNodeLabel(type)}</span>
+                <button
+                  type="button"
+                  className="node-add-btn"
+                  aria-label={`添加${getNodeLabel(type)}`}
+                  onClick={() => {
+                    const lastBeforeEnd = workflowNodes.filter(n => n.type !== NODE_TYPES.END).pop()
+                    addNode(type, lastBeforeEnd?.id || 'start-1')
+                  }}
+                >
+                  + 添加
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="workflow-tips">
+            <h4>💡 操作提示</h4>
+            <ul>
+              <li>点击节点可编辑属性</li>
+              <li>悬停节点显示操作按钮</li>
+              <li>点击「+」可在节点后插入新节点</li>
+              <li>配置自动保存到本地</li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </aside>
+  )
+
+  const renderRightPanel = () => (
+    <aside
+      className={`right-panel ${drawerOpen === 'right' ? 'drawer-open' : ''}`}
+      role="region"
+      aria-label="属性配置面板（Ctrl+P 切换）"
+      aria-hidden={isNarrowViewport && drawerOpen !== 'right'}
+    >
+      {isNarrowViewport && (
+        <div className="drawer-header">
+          <span className="drawer-title">⚙️ 属性配置</span>
+          <button
+            type="button"
+            className="drawer-close"
+            aria-label="关闭属性面板"
+            onClick={() => setDrawerOpen(null)}
+          >×</button>
+        </div>
+      )}
+      <PropertyPanel
         activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onPreview={handlePreview}
-        formFields={formFields}
-        workflowNodes={workflowNodes}
-        onValidate={handleValidate}
+        selectedField={selectedField}
+        selectedNode={selectedNode}
+        onUpdateField={(id, up) => {
+          updateField(id, up)
+        }}
+        onUpdateNode={(id, up) => {
+          updateNode(id, up)
+        }}
       />
+    </aside>
+  )
 
-      <div className="workspace">
-        <aside className="left-panel">
-          {activeTab === 'form' && (
-            <FieldLibrary onAddField={addField} />
-          )}
-          {activeTab === 'workflow' && (
-            <div className="node-library">
-              <h3 className="panel-title">节点库</h3>
-              <div className="node-lib-list">
-                {[NODE_TYPES.APPROVAL, NODE_TYPES.CONDITION, NODE_TYPES.CC].map(type => (
-                  <div key={type} className="node-lib-item">
-                    <span className="node-lib-icon" style={{ background: getNodeColor(type) }}>
-                      {getNodeIcon(type)}
-                    </span>
-                    <span className="node-lib-label">{getNodeLabel(type)}</span>
-                    <button
-                      className="node-add-btn"
-                      onClick={() => {
-                        const lastBeforeEnd = workflowNodes.filter(n => n.type !== NODE_TYPES.END).pop()
-                        addNode(type, lastBeforeEnd?.id || 'start-1')
-                      }}
-                    >
-                      + 添加
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="workflow-tips">
-                <h4>💡 操作提示</h4>
-                <ul>
-                  <li>点击节点可编辑属性</li>
-                  <li>悬停节点显示操作按钮</li>
-                  <li>点击「+」可在节点后插入新节点</li>
-                  <li>配置自动保存到本地</li>
-                </ul>
-              </div>
-            </div>
-          )}
-        </aside>
+  const renderCenterPanel = () => (
+    <main
+      className="center-panel"
+      role="main"
+      aria-label={activeTab === 'form' ? '表单设计主区域' : '流程设计主区域'}
+    >
+      {isNarrowViewport && (
+        <nav
+          className="mobile-drawer-tabs"
+          role="tablist"
+          aria-label="移动端面板切换"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={drawerOpen === 'left'}
+            aria-label={`打开${activeTab === 'form' ? '字段库' : '节点库'}`}
+            className={`mdtab left ${drawerOpen === 'left' ? 'active' : ''}`}
+            onClick={() => setDrawerOpen(prev => prev === 'left' ? null : 'left')}
+          >
+            {activeTab === 'form' ? '📚 字段库' : '🧱 节点库'}
+          </button>
+          <div className="mdtab-center" role="group" aria-label="当前工作区">
+            {activeTab === 'form' ? `📝 表单设计（${formFields.length}字段）` : `🔄 流程设计（${workflowNodes.length}节点）`}
+          </div>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={drawerOpen === 'right'}
+            aria-label="打开属性配置面板"
+            className={`mdtab right ${drawerOpen === 'right' ? 'active' : ''}`}
+            onClick={() => setDrawerOpen(prev => prev === 'right' ? null : 'right')}
+          >
+            ⚙️ 属性
+            {selectedField || selectedNode ? (
+              <span className="mdtab-dot" aria-label="当前有选中项"></span>
+            ) : null}
+          </button>
+        </nav>
+      )}
+      {activeTab === 'form' && (
+        <FormDesigner
+          fields={formFields}
+          selectedId={selectedFieldId}
+          onSelect={setSelectedFieldId}
+          onUpdate={updateField}
+          onRemove={removeField}
+          onMove={moveField}
+          validationErrors={validationErrors}
+        />
+      )}
+      {activeTab === 'workflow' && (
+        <WorkflowDesigner
+          nodes={workflowNodes}
+          selectedId={selectedNodeId}
+          onSelect={setSelectedNodeId}
+          onAddNode={addNode}
+          onRemoveNode={removeNode}
+        />
+      )}
+    </main>
+  )
 
-        <main className="center-panel">
-          {activeTab === 'form' && (
-            <FormDesigner
-              fields={formFields}
-              selectedId={selectedFieldId}
-              onSelect={setSelectedFieldId}
-              onUpdate={updateField}
-              onRemove={removeField}
-              onMove={moveField}
-              validationErrors={validationErrors}
-            />
-          )}
-          {activeTab === 'workflow' && (
-            <WorkflowDesigner
-              nodes={workflowNodes}
-              selectedId={selectedNodeId}
-              onSelect={setSelectedNodeId}
-              onAddNode={addNode}
-              onRemoveNode={removeNode}
-            />
-          )}
-        </main>
+  return (
+    <div className={`app-container ${isNarrowViewport ? 'viewport-narrow' : 'viewport-wide'}`}>
+      <a href="#main-start" className="skip-link">跳到主内容</a>
 
-        <aside className="right-panel">
-          <PropertyPanel
-            activeTab={activeTab}
-            selectedField={selectedField}
-            selectedNode={selectedNode}
-            onUpdateField={updateField}
-            onUpdateNode={updateNode}
-          />
-        </aside>
-      </div>
-
-      {showPreview && (
-        <PreviewPanel
+      <ErrorBoundary onReset={handleResetBoundary}>
+        <Toolbar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onPreview={handlePreview}
           formFields={formFields}
           workflowNodes={workflowNodes}
-          onClose={() => setShowPreview(false)}
-          validationErrors={validationErrors}
           onValidate={handleValidate}
-          formData={previewFormData}
-          setFormData={setPreviewFormData}
+        />
+
+        <div id="main-start" className="workspace">
+          <ErrorBoundary
+            title="左侧面板加载失败"
+            subtitle="组件异常已隔离，您可以继续操作其他区域"
+            showClearStorage={false}
+          >
+            {renderLeftPanel()}
+          </ErrorBoundary>
+
+          <ErrorBoundary
+            title="主工作区加载失败"
+            subtitle="请尝试重置或刷新以恢复"
+            onReset={handleResetBoundary}
+          >
+            {renderCenterPanel()}
+          </ErrorBoundary>
+
+          <ErrorBoundary
+            title="属性面板加载失败"
+            subtitle="属性区域异常已隔离，不会影响整体使用"
+            showClearStorage={false}
+          >
+            {renderRightPanel()}
+          </ErrorBoundary>
+        </div>
+
+        <ErrorBoundary title="预览窗口异常">
+          {showPreview && (
+            <PreviewPanel
+              formFields={formFields}
+              workflowNodes={workflowNodes}
+              onClose={() => setShowPreview(false)}
+              validationErrors={validationErrors}
+              onValidate={handleValidate}
+              formData={previewFormData}
+              setFormData={setPreviewFormData}
+            />
+          )}
+        </ErrorBoundary>
+      </ErrorBoundary>
+
+      {isNarrowViewport && drawerOpen && (
+        <div
+          className="drawer-backdrop"
+          role="presentation"
+          aria-hidden="true"
+          onClick={() => setDrawerOpen(null)}
         />
       )}
 
       {showValidationToast && (
-        <div className={`validation-toast ${showValidationToast.type}`}>
+        <div
+          className={`validation-toast ${showValidationToast.type}`}
+          role="status"
+          aria-live="polite"
+          aria-label="校验结果"
+        >
           <span>{showValidationToast.msg}</span>
         </div>
       )}
