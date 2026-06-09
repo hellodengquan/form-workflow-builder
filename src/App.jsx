@@ -26,6 +26,7 @@ const DEFAULT_NODES = () => ([
 ])
 
 const MOBILE_BREAKPOINT = 1024
+const RECOVERY_KEY = 'form-workflow-builder:crash-recovery'
 
 function App() {
   const [activeTab, setActiveTab] = useState('form')
@@ -37,12 +38,30 @@ function App() {
   const [validationErrors, setValidationErrors] = useState({})
   const [previewFormData, setPreviewFormData] = useState({})
   const [showValidationToast, setShowValidationToast] = useState(null)
+  const [recoveryAvailable, setRecoveryAvailable] = useState(null)
 
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
   )
   const [mobileView, setMobileView] = useState('center')
   const [drawerOpen, setDrawerOpen] = useState(null)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECOVERY_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const age = Date.now() - (parsed?.capturedAt || 0)
+        if (age < 1000 * 60 * 60 * 24 && (parsed.formFields || parsed.workflowNodes)) {
+          setRecoveryAvailable(parsed)
+        } else {
+          localStorage.removeItem(RECOVERY_KEY)
+        }
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }, [])
 
   useEffect(() => {
     const handleResize = () => {
@@ -184,6 +203,66 @@ function App() {
     setShowPreview(false)
     setDrawerOpen(null)
   }, [])
+
+  const handleCapture = useCallback((ctx) => {
+    try {
+      const snapshot = {
+        formFields,
+        workflowNodes,
+        selectedFieldId,
+        selectedNodeId,
+        activeTab,
+        previewFormData,
+        capturedAt: Date.now(),
+        errorMessage: ctx.error?.message || String(ctx.error),
+      }
+      localStorage.setItem(RECOVERY_KEY, JSON.stringify(snapshot))
+      if (typeof console !== 'undefined' && console.info) {
+        console.info('[Recovery] 崩溃前已将编辑快照写入 localStorage（key=', RECOVERY_KEY, '，大小=', JSON.stringify(snapshot).length, '字节）')
+      }
+    } catch (err) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[Recovery] 写入崩溃快照失败：', err)
+      }
+    }
+  }, [formFields, workflowNodes, selectedFieldId, selectedNodeId, activeTab, previewFormData])
+
+  const handleRestore = useCallback((snapshot) => {
+    if (!snapshot) return false
+    let applied = false
+    if (Array.isArray(snapshot.formFields) && snapshot.formFields.length > 0) {
+      setFormFields(snapshot.formFields)
+      applied = true
+    }
+    if (Array.isArray(snapshot.workflowNodes) && snapshot.workflowNodes.length > 0) {
+      setWorkflowNodes(snapshot.workflowNodes)
+      applied = true
+    }
+    if (snapshot.activeTab === 'form' || snapshot.activeTab === 'workflow') {
+      setActiveTab(snapshot.activeTab)
+    }
+    if (typeof snapshot.selectedFieldId === 'string') {
+      setSelectedFieldId(snapshot.selectedFieldId)
+    }
+    if (typeof snapshot.selectedNodeId === 'string') {
+      setSelectedNodeId(snapshot.selectedNodeId)
+    }
+    if (snapshot.previewFormData && typeof snapshot.previewFormData === 'object') {
+      setPreviewFormData(snapshot.previewFormData)
+    }
+    try {
+      localStorage.removeItem(RECOVERY_KEY)
+    } catch (_) {}
+    setRecoveryAvailable(null)
+    return applied ? true : false
+  }, [setFormFields, setWorkflowNodes])
+
+  const handleDismissRecovery = () => {
+    setRecoveryAvailable(null)
+    try {
+      localStorage.removeItem(RECOVERY_KEY)
+    } catch (_) {}
+  }
 
   const renderLeftPanel = () => (
     <aside
@@ -347,7 +426,49 @@ function App() {
     <div className={`app-container ${isNarrowViewport ? 'viewport-narrow' : 'viewport-wide'}`}>
       <a href="#main-start" className="skip-link">跳到主内容</a>
 
-      <ErrorBoundary onReset={handleResetBoundary}>
+      <ErrorBoundary
+        onReset={handleResetBoundary}
+        onCapture={handleCapture}
+        onRestore={handleRestore}
+        recoveryStorageKey={RECOVERY_KEY}
+      >
+        {recoveryAvailable && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="recovery-banner"
+          >
+            <div className="recovery-banner-inner">
+              <span className="recovery-banner-icon" aria-hidden="true">💾</span>
+              <div className="recovery-banner-body">
+                <strong>检测到上次崩溃前的编辑数据</strong>
+                <span>（
+                  {new Date(recoveryAvailable.capturedAt).toLocaleString()}
+                  {recoveryAvailable.errorMessage ? ` · ${recoveryAvailable.errorMessage}` : ''}
+                  ）</span>
+              </div>
+              <div className="recovery-banner-actions" role="group" aria-label="恢复操作">
+                <button
+                  type="button"
+                  className="rb-btn rb-btn-primary"
+                  onClick={() => handleRestore(recoveryAvailable)}
+                  aria-label="恢复上次崩溃前的表单字段和工作流节点"
+                >
+                  🔄 恢复数据
+                </button>
+                <button
+                  type="button"
+                  className="rb-btn rb-btn-outline"
+                  onClick={handleDismissRecovery}
+                  aria-label="忽略崩溃恢复快照并丢弃"
+                >
+                  ✕ 忽略
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <Toolbar
           activeTab={activeTab}
           onTabChange={setActiveTab}

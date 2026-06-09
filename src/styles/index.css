@@ -3232,3 +3232,225 @@ select:focus-visible,
   stroke: var(--primary);
   stroke-width: 4;
 }
+
+/* ===== ErrorBoundary 新增样式：恢复快照提示 + success 按钮 ===== */
+.eb-btn-success {
+  background: #52c41a;
+  color: #fff;
+  border: 1px solid #52c41a;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.eb-btn-success:hover {
+  background: #73d13d;
+  border-color: #73d13d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(82, 196, 26, 0.25);
+}
+.eb-btn-success:focus-visible {
+  outline: 3px solid #73d13d;
+  outline-offset: 2px;
+}
+
+.eb-recovery-hint {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #389e0d;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 8px 0 14px;
+}
+
+/* ===== 崩溃恢复横幅（未渲染 ErrorBoundary 时的顶部提示） ===== */
+.recovery-banner {
+  background: linear-gradient(90deg, #fff7e6, #fffbe6 30%, #f6ffed);
+  border-bottom: 2px solid #ffd591;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 0;
+}
+.recovery-banner-inner {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.recovery-banner-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.recovery-banner-body {
+  flex: 1 1 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #613400;
+}
+.recovery-banner-body strong {
+  color: #ad4e00;
+  font-size: 14px;
+}
+.recovery-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rb-btn {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+}
+.rb-btn:hover { transform: translateY(-1px); }
+.rb-btn-primary {
+  background: #52c41a;
+  color: #fff;
+  border-color: #52c41a;
+}
+.rb-btn-primary:hover { background: #73d13d; }
+.rb-btn-outline {
+  background: #fff;
+  color: #8c8c8c;
+  border-color: #d9d9d9;
+}
+.rb-btn-outline:hover {
+  border-color: #8c8c8c;
+  color: #595959;
+}
+
+/* ===== 移动端 Safari fixed 定位 + 虚拟键盘冲突修复 =====
+   - 使用 -webkit-fill-available 作为 100vh 的替代（Safari 地址栏展开/收起导致跳动）
+   - 抽屉底部预留安全距离 env(safe-area-inset-bottom)
+   - 打开键盘（:focus-within）时抽屉高度自适应，禁止 fixed 超出视窗
+*/
+html, body {
+  height: 100%;
+  /* Safari iOS 15.4+ 动态视口单位降级 */
+  height: -webkit-fill-available;
+  height: 100dvh;
+}
+body {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-container {
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1024px) {
+  /* 抽屉容器用 flex 占满，不用绝对高度 */
+  .left-panel,
+  .right-panel {
+    z-index: 900;
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    height: -webkit-fill-available;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: -webkit-fill-available;
+    max-height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* 禁止 Safari 橡皮筋回弹把抽屉推出视图 */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* 安全区：Home Indicator 不遮挡底部操作按钮 */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* 防止 Safari 字体缩放 */
+    -webkit-text-size-adjust: 100%;
+  }
+  /* 抽屉 focus-within（键盘弹出）时：降低 top 给键盘腾空间，用 transform 补偿 */
+  .left-panel:focus-within,
+  .right-panel:focus-within {
+    /* 让浏览器自行重排而不是固定高度 */
+    height: auto;
+    max-height: -webkit-fill-available;
+    max-height: 100dvh;
+    bottom: 0;
+  }
+
+  .drawer-header {
+    /* 顶部安全区（灵动岛 / 刘海） */
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: inherit;
+    backdrop-filter: blur(8px);
+  }
+
+  /* 抽屉弹出时，锁定 body 滚动避免背景穿透（iOS Safari 双滚动问题） */
+  .viewport-narrow:has(.left-panel.drawer-open),
+  .viewport-narrow:has(.right-panel.drawer-open) {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+  }
+
+  /* Tab 栏底部安全区 */
+  .mobile-drawer-tabs {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@media (max-width: 640px) {
+  .recovery-banner-inner {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .recovery-banner-body {
+    flex-basis: 100%;
+  }
+  .recovery-banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .error-boundary-card {
+    margin: 12px;
+    padding: 24px 18px;
+  }
+  .error-boundary-actions {
+    flex-direction: column;
+  }
+  .error-boundary-actions .eb-btn {
+    width: 100%;
+  }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .left-panel,
+  .right-panel,
+  .eb-btn,
+  .field-item,
+  .workflow-node,
+  .drawer-backdrop,
+  .recovery-banner-inner {
+    transition: none !important;
+  }
+}
