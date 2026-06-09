@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import FieldLibrary from './components/FieldLibrary'
 import FormDesigner from './components/FormDesigner'
 import WorkflowDesigner from './components/WorkflowDesigner'
@@ -6,25 +6,38 @@ import PreviewPanel from './components/PreviewPanel'
 import PropertyPanel from './components/PropertyPanel'
 import Toolbar from './components/Toolbar'
 import { FIELD_TYPES, NODE_TYPES, generateId } from './utils/constants'
+import { useLocalStorage, STORAGE_KEYS } from './hooks/useLocalStorage'
+import { validateAllFields } from './utils/validation'
+
+const DEFAULT_FIELDS = () => ([
+  { id: generateId(), type: 'text', label: '申请标题', placeholder: '请输入申请标题', required: true },
+  { id: generateId(), type: 'textarea', label: '申请说明', placeholder: '请详细说明申请事由', required: true },
+  { id: generateId(), type: 'number', label: '申请金额', placeholder: '请输入金额', required: false, unit: '元' },
+  { id: generateId(), type: 'date', label: '期望完成日期', required: false },
+])
+
+const DEFAULT_NODES = () => ([
+  { id: 'start-1', type: NODE_TYPES.START, name: '提交申请', x: 320, y: 40, approver: '申请人' },
+  { id: 'approval-1', type: NODE_TYPES.APPROVAL, name: '直属主管审批', x: 320, y: 160, approver: '直属主管' },
+  { id: 'approval-2', type: NODE_TYPES.APPROVAL, name: '部门经理审批', x: 320, y: 280, approver: '部门经理' },
+  { id: 'cc-1', type: NODE_TYPES.CC, name: '抄送人事部', x: 320, y: 400, approver: '人事部' },
+  { id: 'end-1', type: NODE_TYPES.END, name: '流程结束', x: 320, y: 520, approver: '系统' },
+])
 
 function App() {
   const [activeTab, setActiveTab] = useState('form')
-  const [formFields, setFormFields] = useState([
-    { id: generateId(), type: 'text', label: '申请标题', placeholder: '请输入申请标题', required: true },
-    { id: generateId(), type: 'textarea', label: '申请说明', placeholder: '请详细说明申请事由', required: true },
-    { id: generateId(), type: 'number', label: '申请金额', placeholder: '请输入金额', required: false, unit: '元' },
-    { id: generateId(), type: 'date', label: '期望完成日期', required: false },
-  ])
-  const [workflowNodes, setWorkflowNodes] = useState([
-    { id: 'start-1', type: NODE_TYPES.START, name: '提交申请', x: 320, y: 40, approver: '申请人' },
-    { id: 'approval-1', type: NODE_TYPES.APPROVAL, name: '直属主管审批', x: 320, y: 160, approver: '直属主管' },
-    { id: 'approval-2', type: NODE_TYPES.APPROVAL, name: '部门经理审批', x: 320, y: 280, approver: '部门经理' },
-    { id: 'cc-1', type: NODE_TYPES.CC, name: '抄送人事部', x: 320, y: 400, approver: '人事部' },
-    { id: 'end-1', type: NODE_TYPES.END, name: '流程结束', x: 320, y: 520, approver: '系统' },
-  ])
+  const [formFields, setFormFields] = useLocalStorage(STORAGE_KEYS.FORM_FIELDS, DEFAULT_FIELDS)
+  const [workflowNodes, setWorkflowNodes] = useLocalStorage(STORAGE_KEYS.WORKFLOW_NODES, DEFAULT_NODES)
   const [selectedFieldId, setSelectedFieldId] = useState(null)
   const [selectedNodeId, setSelectedNodeId] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
+  const [validationErrors, setValidationErrors] = useState({})
+  const [previewFormData, setPreviewFormData] = useState({})
+  const [showValidationToast, setShowValidationToast] = useState(null)
+
+  const validationResult = useMemo(() => {
+    return validateAllFields(formFields, previewFormData)
+  }, [formFields, previewFormData])
 
   const addField = useCallback((fieldType) => {
     const fieldDef = FIELD_TYPES.find(f => f.type === fieldType)
@@ -40,16 +53,16 @@ function App() {
     }
     setFormFields(prev => [...prev, newField])
     setSelectedFieldId(newField.id)
-  }, [])
+  }, [setFormFields])
 
   const updateField = useCallback((fieldId, updates) => {
     setFormFields(prev => prev.map(f => f.id === fieldId ? { ...f, ...updates } : f))
-  }, [])
+  }, [setFormFields])
 
   const removeField = useCallback((fieldId) => {
     setFormFields(prev => prev.filter(f => f.id !== fieldId))
     if (selectedFieldId === fieldId) setSelectedFieldId(null)
-  }, [selectedFieldId])
+  }, [selectedFieldId, setFormFields])
 
   const moveField = useCallback((dragIndex, hoverIndex) => {
     setFormFields(prev => {
@@ -58,7 +71,7 @@ function App() {
       newFields.splice(hoverIndex, 0, draggedItem)
       return newFields
     })
-  }, [])
+  }, [setFormFields])
 
   const addNode = useCallback((nodeType, afterNodeId) => {
     const newNode = {
@@ -80,11 +93,11 @@ function App() {
       return [...before, newNode, ...affected]
     })
     setSelectedNodeId(newNode.id)
-  }, [])
+  }, [setWorkflowNodes])
 
   const updateNode = useCallback((nodeId, updates) => {
     setWorkflowNodes(prev => prev.map(n => n.id === nodeId ? { ...n, ...updates } : n))
-  }, [])
+  }, [setWorkflowNodes])
 
   const removeNode = useCallback((nodeId) => {
     setWorkflowNodes(prev => {
@@ -95,7 +108,25 @@ function App() {
       return [...prev.slice(0, nodeIndex), ...affected]
     })
     if (selectedNodeId === nodeId) setSelectedNodeId(null)
-  }, [selectedNodeId])
+  }, [selectedNodeId, setWorkflowNodes])
+
+  const handlePreview = useCallback(() => {
+    setShowPreview(true)
+    setPreviewFormData({})
+    setValidationErrors({})
+  }, [])
+
+  const handleValidate = useCallback(() => {
+    const result = validateAllFields(formFields, previewFormData)
+    setValidationErrors(result.errors)
+    if (result.valid) {
+      setShowValidationToast({ type: 'success', msg: '🎉 所有字段校验通过！' })
+    } else {
+      const errorCount = Object.keys(result.errors).length
+      setShowValidationToast({ type: 'error', msg: `⚠️ 发现 ${errorCount} 个字段需要修正` })
+    }
+    setTimeout(() => setShowValidationToast(null), 2500)
+  }, [formFields, previewFormData])
 
   const selectedField = formFields.find(f => f.id === selectedFieldId)
   const selectedNode = workflowNodes.find(n => n.id === selectedNodeId)
@@ -105,9 +136,10 @@ function App() {
       <Toolbar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onPreview={() => setShowPreview(true)}
+        onPreview={handlePreview}
         formFields={formFields}
         workflowNodes={workflowNodes}
+        onValidate={handleValidate}
       />
 
       <div className="workspace">
@@ -143,6 +175,7 @@ function App() {
                   <li>点击节点可编辑属性</li>
                   <li>悬停节点显示操作按钮</li>
                   <li>点击「+」可在节点后插入新节点</li>
+                  <li>配置自动保存到本地</li>
                 </ul>
               </div>
             </div>
@@ -158,6 +191,7 @@ function App() {
               onUpdate={updateField}
               onRemove={removeField}
               onMove={moveField}
+              validationErrors={validationErrors}
             />
           )}
           {activeTab === 'workflow' && (
@@ -187,7 +221,17 @@ function App() {
           formFields={formFields}
           workflowNodes={workflowNodes}
           onClose={() => setShowPreview(false)}
+          validationErrors={validationErrors}
+          onValidate={handleValidate}
+          formData={previewFormData}
+          setFormData={setPreviewFormData}
         />
+      )}
+
+      {showValidationToast && (
+        <div className={`validation-toast ${showValidationToast.type}`}>
+          <span>{showValidationToast.msg}</span>
+        </div>
       )}
     </div>
   )

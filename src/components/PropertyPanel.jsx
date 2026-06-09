@@ -150,6 +150,127 @@ function FieldProperty({ field, onUpdate }) {
       )}
 
       <div className="pp-section">
+        <h4 className="pp-section-title">校验规则</h4>
+        <div className="pp-form">
+          {field.type === 'number' && (
+            <>
+              <div className="form-row">
+                <label>最小值</label>
+                <input
+                  type="number"
+                  value={field.min !== undefined && field.min !== '' ? field.min : ''}
+                  placeholder="例如：0"
+                  onChange={(e) => onUpdate(field.id, { min: e.target.value === '' ? undefined : Number(e.target.value) })}
+                />
+              </div>
+              <div className="form-row">
+                <label>最大值</label>
+                <input
+                  type="number"
+                  value={field.max !== undefined && field.max !== '' ? field.max : ''}
+                  placeholder="例如：999999"
+                  onChange={(e) => onUpdate(field.id, { max: e.target.value === '' ? undefined : Number(e.target.value) })}
+                />
+              </div>
+              <div className="form-row">
+                <label className="switch-label">
+                  <span>必须为整数</span>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={!!field.integer}
+                      onChange={(e) => onUpdate(field.id, { integer: e.target.checked })}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </label>
+              </div>
+            </>
+          )}
+
+          {field.type === 'date' && (
+            <>
+              <div className="form-row">
+                <label>最早日期</label>
+                <input
+                  type="date"
+                  value={field.minDate || ''}
+                  onChange={(e) => onUpdate(field.id, { minDate: e.target.value })}
+                />
+              </div>
+              <div className="form-row">
+                <label>最晚日期</label>
+                <input
+                  type="date"
+                  value={field.maxDate || ''}
+                  onChange={(e) => onUpdate(field.id, { maxDate: e.target.value })}
+                />
+              </div>
+            </>
+          )}
+
+          {(field.type === 'text' || field.type === 'textarea') && (
+            <>
+              <div className="form-row">
+                <label>最小字符长度</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={field.minLength !== undefined && field.minLength !== '' ? field.minLength : ''}
+                  placeholder="0"
+                  onChange={(e) => onUpdate(field.id, { minLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+                />
+              </div>
+              <div className="form-row">
+                <label>最大字符长度</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={field.maxLength !== undefined && field.maxLength !== '' ? field.maxLength : ''}
+                  placeholder="例如：100"
+                  onChange={(e) => onUpdate(field.id, { maxLength: e.target.value === '' ? undefined : Number(e.target.value) })}
+                />
+              </div>
+              {field.type === 'text' && (
+                <>
+                  <div className="form-row">
+                    <label>内容格式类型</label>
+                    <select
+                      value={field.fieldType || 'text'}
+                      onChange={(e) => onUpdate(field.id, { fieldType: e.target.value })}
+                    >
+                      <option value="text">普通文本</option>
+                      <option value="email">邮箱地址</option>
+                      <option value="phone">手机号码</option>
+                      <option value="url">网址URL</option>
+                    </select>
+                  </div>
+                  <div className="form-row">
+                    <label>自定义正则表达式</label>
+                    <input
+                      type="text"
+                      value={field.pattern || ''}
+                      placeholder="例如：^[A-Za-z0-9]+$"
+                      onChange={(e) => onUpdate(field.id, { pattern: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label>正则不匹配提示</label>
+                    <input
+                      type="text"
+                      value={field.patternHint || ''}
+                      placeholder="格式不正确"
+                      onChange={(e) => onUpdate(field.id, { patternHint: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="pp-section">
         <h4 className="pp-section-title">高级配置</h4>
         <div className="pp-form">
           <div className="form-row">

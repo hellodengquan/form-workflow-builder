@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function Toolbar({ activeTab, onTabChange, onPreview, formFields, workflowNodes }) {
+export default function Toolbar({ activeTab, onTabChange, onPreview, formFields, workflowNodes, onValidate }) {
   const [showSave, setShowSave] = useState(false)
 
   const handleSave = () => {
@@ -42,9 +42,15 @@ export default function Toolbar({ activeTab, onTabChange, onPreview, formFields,
       </div>
 
       <div className="toolbar-right">
+        {onValidate && (
+          <button className="tbar-btn ghost" onClick={onValidate}>
+            <span>🔍</span>
+            <span>校验表单</span>
+          </button>
+        )}
         <button className="tbar-btn ghost" onClick={handleSave}>
           <span>💾</span>
-          <span>保存草稿</span>
+          <span>自动保存</span>
         </button>
         <button className="tbar-btn outline" onClick={handleSave}>
           <span>📤</span>
@@ -67,7 +73,7 @@ export default function Toolbar({ activeTab, onTabChange, onPreview, formFields,
       {showSave && (
         <div className="toast show">
           <span className="toast-icon">✅</span>
-          <span>保存成功！</span>
+          <span>数据已自动保存到本地</span>
         </div>
       )}
     </header>

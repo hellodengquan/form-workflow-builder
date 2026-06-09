@@ -922,6 +922,74 @@ body {
   cursor: not-allowed;
 }
 
+.field-item.has-error {
+  border-color: var(--danger) !important;
+  background: linear-gradient(135deg, #fff1f0, #fff) !important;
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.field-errors {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--danger);
+  padding: 5px 10px;
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.error-icon {
+  font-size: 12px;
+}
+
+.validation-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 12px 24px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  z-index: 2000;
+  animation: toastIn 0.3s ease forwards;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes toastIn {
+  to { transform: translateX(-50%) translateY(0); }
+}
+
+.validation-toast.success {
+  background: linear-gradient(135deg, #52c41a, #389e0d);
+  color: #fff;
+}
+
+.validation-toast.error {
+  background: linear-gradient(135deg, #ff4d4f, #cf1322);
+  color: #fff;
+}
+
 /* ========== Workflow Designer ========== */
 .workflow-designer {
   max-width: 900px;
@@ -1935,8 +2003,42 @@ body {
   margin-bottom: 22px;
 }
 
+.pf-field.has-error .pff-control input,
+.pf-field.has-error .pff-control textarea,
+.pf-field.has-error .pff-control select,
+.pf-field.has-error .number-input-wrap input {
+  border-color: var(--danger) !important;
+  background: #fff1f0;
+}
+
 .pf-field:last-child {
   margin-bottom: 0;
+}
+
+.pf-field-errors {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pf-error-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--danger);
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  align-self: flex-start;
+}
+
+.pf-error-icon {
+  font-size: 12px;
 }
 
 .pff-label {

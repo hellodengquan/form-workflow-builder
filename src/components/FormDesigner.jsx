@@ -10,6 +10,7 @@ export default function FormDesigner({
   onUpdate,
   onRemove,
   onMove,
+  validationErrors = {},
 }) {
   const [dragIndex, setDragIndex] = useState(null)
   const [isDragOver, setIsDragOver] = useState(null)
@@ -93,7 +94,7 @@ export default function FormDesigner({
             {fields.map((field, index) => (
               <div
                 key={field.id}
-                className={`field-item ${selectedId === field.id ? 'selected' : ''} ${isDragOver === index ? 'drag-over' : ''} ${dragIndex === index ? 'dragging' : ''}`}
+                className={`field-item ${selectedId === field.id ? 'selected' : ''} ${isDragOver === index ? 'drag-over' : ''} ${dragIndex === index ? 'dragging' : ''} ${validationErrors[field.id]?.length ? 'has-error' : ''}`}
                 onClick={() => onSelect(field.id)}
                 draggable
                 onDragStart={(e) => handleDragStart(e, index)}
@@ -114,6 +115,16 @@ export default function FormDesigner({
                       <span className="field-type-tag">{getTypeName(field.type)}</span>
                     </div>
                     {renderFieldPreview(field)}
+                    {validationErrors[field.id] && validationErrors[field.id].length > 0 && (
+                      <div className="field-errors" role="alert">
+                        {validationErrors[field.id].map((err, i) => (
+                          <span key={i} className="field-error">
+                            <span className="error-icon">⚠️</span>
+                            {err}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

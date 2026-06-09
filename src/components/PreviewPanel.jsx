@@ -1,12 +1,36 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { NODE_TYPES, FIELD_TYPES } from '../utils/constants'
+import { validateAllFields, validateField } from '../utils/validation'
 
-export default function PreviewPanel({ formFields, workflowNodes, onClose }) {
+export default function PreviewPanel({
+  formFields,
+  workflowNodes,
+  onClose,
+  validationErrors: externalErrors,
+  onValidate,
+  formData: externalFormData,
+  setFormData: setExternalFormData,
+}) {
+  const hasExternalFormData = typeof externalFormData === 'object' && externalFormData !== null
   const [step, setStep] = useState(0)
   const [view, setView] = useState('form')
-  const [formData, setFormData] = useState({})
+  const [internalFormData, setInternalFormData] = useState({})
   const [currentNodeIdx, setCurrentNodeIdx] = useState(0)
   const [comments, setComments] = useState({})
+  const [localErrors, setLocalErrors] = useState({})
+
+  const formData = hasExternalFormData ? externalFormData : internalFormData
+  const setFormData = setExternalFormData || setInternalFormData
+
+  const allErrors = useMemo(() => {
+    const merged = { ...localErrors }
+    if (externalErrors) {
+      Object.entries(externalErrors).forEach(([k, v]) => {
+        merged[k] = v
+      })
+    }
+    return merged
+  }, [localErrors, externalErrors])
 
   const sortedNodes = [...workflowNodes].sort((a, b) => a.y - b.y)
   const approvalNodes = sortedNodes.filter(n => n.type === NODE_TYPES.APPROVAL || n.type === NODE_TYPES.START)
@@ -17,8 +41,10 @@ export default function PreviewPanel({ formFields, workflowNodes, onClose }) {
     return () => window.removeEventListener('keydown', handleEsc)
   }, [onClose])
 
-  const handleFieldChange = (fieldId, value) => {
-    setFormData(prev => ({ ...prev, [fieldId]: value }))
+  const handleFieldChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field.id]: value }))
+    const fieldErrors = validateField(field, value)
+    setLocalErrors(prev => ({ ...prev, [field.id]: fieldErrors }))
   }
 
   const nextNode = () => {
@@ -104,14 +130,24 @@ export default function PreviewPanel({ formFields, workflowNodes, onClose }) {
                   </div>
                 ) : (
                   formFields.map(field => (
-                    <div key={field.id} className="pf-field">
+                    <div key={field.id} className={`pf-field ${allErrors[field.id]?.length ? 'has-error' : ''}`}>
                       <div className="pff-label">
                         {field.label}
                         {field.required && <span className="req">*</span>}
                       </div>
                       <div className="pff-control">
-                        {renderField(field, formData[field.id], (v) => handleFieldChange(field.id, v))}
+                        {renderField(field, formData[field.id], (v) => handleFieldChange(field, v))}
                       </div>
+                      {allErrors[field.id]?.length > 0 && (
+                        <div className="pf-field-errors">
+                          {allErrors[field.id].map((err, i) => (
+                            <span key={i} className="pf-error-tip">
+                              <span className="pf-error-icon">⚠️</span>
+                              {err}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -129,7 +165,15 @@ export default function PreviewPanel({ formFields, workflowNodes, onClose }) {
                 </div>
                 <div className="pff-actions">
                   <button className="btn btn-outline" onClick={onClose}>取消</button>
-                  <button className="btn btn-primary" onClick={() => setView('workflow')}>
+                  <button className="btn btn-primary" onClick={() => {
+                    const result = validateAllFields(formFields, formData)
+                    setLocalErrors(result.errors)
+                    if (result.valid) {
+                      setView('workflow')
+                    } else if (onValidate) {
+                      onValidate()
+                    }
+                  }}>
                     提交申请 →
                   </button>
                 </div>
